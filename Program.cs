@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Text;
 
 Console.WriteLine($"uwap.org/backto {VersionString(Assembly.GetExecutingAssembly())}");
@@ -86,15 +86,21 @@ Console.WriteLine("Done!");
 
 
 
-static void Backup(string source, string target, StateTree state)
+void Backup(string source, string target, StateTree state)
 {
     //remove deleted directories
     foreach (var kv in state.Directories)
         if (!Directory.Exists(source + '/' + kv.Key))
-        {
-            Directory.Delete(target + '/' + kv.Key, true);
-            state.Directories.Remove(kv.Key);
-        }
+            switch (DeleteAndCount(target + '/' + kv.Key, state))
+            {
+                case DirectoryDeletionResult.Success:
+                    state.Directories.Remove(kv.Key);
+                    break;
+                case DirectoryDeletionResult.AllFailed:
+                    Failing++;
+                    FailedPaths.Add(target + '/' + kv.Key);
+                    break;
+            }
 
     //remove deleted files
     foreach (var kv in state.Files)
@@ -163,6 +169,62 @@ void ShowStatus()
     }
 }
 
+DirectoryDeletionResult DeleteAndCount(string path, StateTree tree)
+{
+    bool anySucceeded = false;
+    List<string> failed = [];
+
+    foreach (var kv in tree.Directories)
+        switch (DeleteAndCount(path + '/' + kv.Key, kv.Value))
+        {
+            case DirectoryDeletionResult.Success:
+                anySucceeded = true;
+                tree.Directories.Remove(kv.Key);
+                break;
+            case DirectoryDeletionResult.SomeFailed:
+                anySucceeded = true;
+                break;
+            case DirectoryDeletionResult.AllFailed:
+                failed.Add(path[(Target.Length+1)..] + '/' + kv.Key);
+                break;
+        }
+    
+    foreach (var kv in tree.Files)
+        try
+        {
+            File.Delete(path + '/' + kv.Key);
+            tree.Files.Remove(kv.Key);
+            Deleted++;
+            anySucceeded = true;
+        }
+        catch
+        {
+            failed.Add(path[(Target.Length+1)..] + '/' + kv.Key);
+        }
+    
+    if (failed.Count == 0)
+        try
+        {
+            Directory.Delete(path);
+            Deleted++;
+            return DirectoryDeletionResult.Success;
+        }
+        catch
+        {
+            return DirectoryDeletionResult.AllFailed;
+        }
+    else if (anySucceeded)
+    {
+        FailedPaths.AddRange(failed);
+        Failing += failed.Count;
+        return DirectoryDeletionResult.SomeFailed;
+    }
+    else
+    {
+        return DirectoryDeletionResult.AllFailed;
+    }
+}
+
 static string VersionString(Assembly assembly)
 {
     var version = assembly.GetName().Version;
@@ -173,6 +235,13 @@ static string VersionString(Assembly assembly)
     if (version.Build != 0)
         return $"{version.Major}.{version.Minor}.{version.Build}";
     return $"{version.Major}.{version.Minor}";
+}
+
+public enum DirectoryDeletionResult
+{
+    Success,
+    SomeFailed,
+    AllFailed
 }
 
 public class StateTree
