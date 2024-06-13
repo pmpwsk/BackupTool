@@ -1,8 +1,9 @@
 using System.Reflection;
 using System.Text;
 
-Console.WriteLine($"uwap.org/backto {VersionString(Assembly.GetCallingAssembly())}");
+Console.WriteLine($"uwap.org/backto {VersionString(Assembly.GetExecutingAssembly())}");
 
+//check arguments
 if (args.Length != 2)
 {
     Console.ForegroundColor = ConsoleColor.Red;
