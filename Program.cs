@@ -68,11 +68,18 @@ int Deleted = 0;
 int Failing = 0;
 List<string> FailedPaths = [];
 
+//start status task
+var statusTask = Task.Run(ShowStatus);
+
 //run backup
 Backup(Source, Target, State);
 
 //save new state
 File.WriteAllText(Target + "/BackupState.bin", State.Encode());
+
+//wait for status task to finish
+Running = false;
+await statusTask;
 
 //done
 Console.WriteLine("Done!");
@@ -121,6 +128,38 @@ static void Backup(string source, string target, StateTree state)
             state.Files[file] = timestamp;
             File.Copy(source + '/' + file, target + '/' + file, true);
         }
+    }
+}
+
+void ShowStatus()
+{
+    //remember top offset
+    int topOffset = Console.CursorTop;
+
+    //initial write
+    Console.WriteLine("Created: 0");
+    Console.WriteLine("Changed: 0");
+    Console.WriteLine("Deleted: 0");
+    Console.WriteLine("Failing: 0");
+
+    while (Running)
+    {
+        Thread.Sleep(100);
+        Console.CursorLeft = 9;
+        Console.CursorTop = topOffset;
+        Console.Write(Created);
+
+        Console.CursorLeft = 9;
+        Console.CursorTop = topOffset + 1;
+        Console.Write(Changed);
+
+        Console.CursorLeft = 9;
+        Console.CursorTop = topOffset + 2;
+        Console.Write(Deleted);
+
+        Console.CursorLeft = 9;
+        Console.CursorTop = topOffset + 3;
+        Console.Write(Failing);
     }
 }
 
