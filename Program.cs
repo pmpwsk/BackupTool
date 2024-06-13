@@ -1,23 +1,35 @@
-﻿using System.Text;
+using System.Text;
 
 if (args.Length != 2)
 {
+    Console.ForegroundColor = ConsoleColor.Red;
     Console.WriteLine("Invalid parameters!");
-    Console.WriteLine("Usage: BackupTool [source] [target]");
+    Console.ForegroundColor = ConsoleColor.Blue;
+    Console.Write("Usage:");
+    Console.ResetColor();
+    Console.WriteLine(" backto [source] [target]");
     return;
 }
 string Source = args[0];
 if (!Directory.Exists(Source))
 {
+    Console.ForegroundColor = ConsoleColor.Red;
     Console.WriteLine("Invalid source!");
-    Console.WriteLine("Usage: BackupTool [source] [target]");
+    Console.ForegroundColor = ConsoleColor.Blue;
+    Console.Write("Usage:");
+    Console.ResetColor();
+    Console.WriteLine(" backto [source] [target]");
     return;
 }
 string Target = args[1];
 if (!Directory.Exists(Target))
 {
+    Console.ForegroundColor = ConsoleColor.Red;
     Console.WriteLine("Invalid target!");
-    Console.WriteLine("Usage: BackupTool [source] [target]");
+    Console.ForegroundColor = ConsoleColor.Blue;
+    Console.Write("Usage:");
+    Console.ResetColor();
+    Console.WriteLine(" backto [source] [target]");
     return;
 }
 
@@ -31,8 +43,12 @@ else
 {
     if (Directory.GetFiles(Target).Length > 0 || Directory.GetDirectories(Target).Length > 0)
     {
+        Console.ForegroundColor = ConsoleColor.Red;
         Console.WriteLine("The target doesn't contain BackupState.bin but isn't empty!");
-        Console.WriteLine("Usage: BackupTool [source] [target]");
+        Console.ForegroundColor = ConsoleColor.Blue;
+        Console.Write("Usage:");
+        Console.ResetColor();
+        Console.WriteLine(" backto [source] [target]");
         return;
     }
 
