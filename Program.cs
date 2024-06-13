@@ -60,6 +60,14 @@ else
     State = new();
 }
 
+//status variables
+bool Running = true;
+int Created = 0;
+int Changed = 0;
+int Deleted = 0;
+int Failing = 0;
+List<string> FailedPaths = [];
+
 //run backup
 Backup(Source, Target, State);
 
