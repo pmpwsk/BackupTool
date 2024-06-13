@@ -1,4 +1,7 @@
+using System.Reflection;
 using System.Text;
+
+Console.WriteLine($"uwap.org/backto {VersionString(Assembly.GetCallingAssembly())}");
 
 if (args.Length != 2)
 {
@@ -110,6 +113,18 @@ static void Backup(string source, string target, StateTree state)
             File.Copy(source + '/' + file, target + '/' + file, true);
         }
     }
+}
+
+static string VersionString(Assembly assembly)
+{
+    var version = assembly.GetName().Version;
+    if (version == null)
+        return "0.1";
+    if (version.MinorRevision != 0)
+        return $"{version.Major}.{version.Minor}.{version.Build}.{version.MinorRevision}";
+    if (version.Build != 0)
+        return $"{version.Major}.{version.Minor}.{version.Build}";
+    return $"{version.Major}.{version.Minor}";
 }
 
 public class StateTree
