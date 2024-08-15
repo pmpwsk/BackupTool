@@ -14,7 +14,7 @@ if (args.Length != 2)
     Console.WriteLine(" backto [source] [target]");
     return;
 }
-string Source = args[0];
+string Source = Path.GetFullPath(args[0]);
 if (!Directory.Exists(Source))
 {
     Console.ForegroundColor = ConsoleColor.Red;
@@ -25,7 +25,17 @@ if (!Directory.Exists(Source))
     Console.WriteLine(" backto [source] [target]");
     return;
 }
-string Target = args[1];
+if (File.Exists(Source + "/BackupState.bin"))
+{
+    Console.ForegroundColor = ConsoleColor.Red;
+    Console.WriteLine("The source contains BackupState.bin, meaning it's probably a backup target!");
+    Console.ForegroundColor = ConsoleColor.Blue;
+    Console.Write("Usage:");
+    Console.ResetColor();
+    Console.WriteLine(" backto [source] [target]");
+    return;
+}
+string Target = Path.GetFullPath(args[1]);
 if (!Directory.Exists(Target))
 {
     Console.ForegroundColor = ConsoleColor.Red;
@@ -62,6 +72,8 @@ else
 
 //status variables
 bool Running = true;
+
+int Checked = 0;
 int Created = 0;
 int Changed = 0;
 int Deleted = 0;
@@ -72,7 +84,8 @@ List<string> FailedPaths = [];
 var statusTask = Task.Run(ShowStatus);
 
 //run backup
-Backup(Source, Target, State);
+if (Backup(Source, Target, State) == DirectoryBackupResult.AllFailed)
+    FailedPaths.Add("/");
 
 //save new state
 File.WriteAllText(Target + "/BackupState.bin", State.Encode());
@@ -82,99 +95,200 @@ Running = false;
 await statusTask;
 
 //done
+Console.ForegroundColor = ConsoleColor.Green;
 Console.WriteLine("Done!");
+Console.ResetColor();
 
-
-
-void Backup(string source, string target, StateTree state)
+//print failures
+if (FailedPaths.Count != 0)
 {
+    Console.WriteLine();
+    Console.ForegroundColor = ConsoleColor.Red;
+    Console.WriteLine("Failed:");
+    foreach (var path in FailedPaths)
+        Console.WriteLine(path);
+    Console.ResetColor();
+}
+
+
+DirectoryBackupResult Backup(string source, string target, StateTree state)
+{
+    bool anySucceeded = false;
+    List<string> failed = [];
+
     //remove deleted directories
     foreach (var kv in state.Directories)
+    {
+        Checked++;
         if (!Directory.Exists(source + '/' + kv.Key))
-            switch (DeleteAndCount(target + '/' + kv.Key, state))
+            switch (DeleteAndCount(target + '/' + kv.Key, kv.Value))
             {
                 case DirectoryDeletionResult.Success:
+                    anySucceeded = true;
                     state.Directories.Remove(kv.Key);
                     break;
+                case DirectoryDeletionResult.SomeFailed:
+                    anySucceeded = true;
+                    break;
                 case DirectoryDeletionResult.AllFailed:
-                    Failing++;
-                    FailedPaths.Add(target + '/' + kv.Key);
+                    failed.Add('/' + target[Target.Length..] + kv.Key);
                     break;
             }
+        else anySucceeded = true;
+    }
 
     //remove deleted files
     foreach (var kv in state.Files)
+    {
+        Checked++;
         if (!File.Exists(source + '/' + kv.Key))
-        {
-            File.Delete(target + '/' + kv.Key);
-            state.Directories.Remove(kv.Key);
-        }
+            try
+            {
+                Deleted++;
+                File.Delete(target + '/' + kv.Key);
+                state.Directories.Remove(kv.Key);
+                anySucceeded = true;
+            }
+            catch
+            {
+                failed.Add('/' + target[Target.Length..] + kv.Key);
+            }
+        else anySucceeded = true;
+    }
 
     DirectoryInfo sourceInfo = new(source);
 
     //add/update directories
     foreach (var directory in sourceInfo.GetDirectories().Select(x => x.Name))
     {
-        if (!state.Directories.TryGetValue(directory, out var subState))
+        Checked++;
+        try
         {
-            subState = new();
-            state.Directories[directory] = subState;
-            Directory.CreateDirectory(target + '/' + directory);
-        }
+            if (!state.Directories.TryGetValue(directory, out var subState))
+            {
+                Created++;
+                Directory.CreateDirectory(target + '/' + directory);
+                subState = new();
+                state.Directories[directory] = subState;
+                anySucceeded = true;
+            }
+            else anySucceeded = true;
 
-        Backup(source + '/' + directory, target + '/' + directory, subState);
+            switch (Backup(source + '/' + directory, target + '/' + directory, subState))
+            {
+                case DirectoryBackupResult.Success:
+                case DirectoryBackupResult.SomeFailed:
+                    anySucceeded = true;
+                    break;
+                case DirectoryBackupResult.AllFailed:
+                    failed.Add('/' + target[Target.Length..] + directory);
+                    break;
+                //no action for NoAction
+            }
+        }
+        catch
+        {
+            failed.Add('/' + target[Target.Length..] + directory);
+        }
     }
 
     //add/update files
     foreach (var file in sourceInfo.GetFiles().Select(x => x.Name))
     {
-        string timestamp = File.GetLastWriteTimeUtc(source + '/' + file).Ticks.ToString();
-        if ((!state.Files.TryGetValue(file, out var savedTimestamp)) || savedTimestamp != timestamp)
+        Checked++;
+        try
         {
-            state.Files[file] = timestamp;
-            File.Copy(source + '/' + file, target + '/' + file, true);
+            string timestamp = File.GetLastWriteTimeUtc(source + '/' + file).Ticks.ToString();
+            if (!state.Files.TryGetValue(file, out var savedTimestamp))
+            {
+                Created++;
+                File.Copy(source + '/' + file, target + '/' + file, true);
+                state.Files[file] = timestamp;
+                anySucceeded = true;
+            }
+            else if (savedTimestamp != timestamp)
+            {
+                Changed++;
+                File.Copy(source + '/' + file, target + '/' + file, true);
+                state.Files[file] = timestamp;
+                anySucceeded = true;
+            }
+        }
+        catch
+        {
+            failed.Add('/' + target[Target.Length..] + file);
         }
     }
+    
+    if (failed.Count == 0)
+        return anySucceeded ? DirectoryBackupResult.Success : DirectoryBackupResult.NoAction;
+
+    Failing += failed.Count;
+    if (anySucceeded)
+    {
+        FailedPaths.AddRange(failed);
+        return DirectoryBackupResult.SomeFailed;
+    }
+    return DirectoryBackupResult.AllFailed;
 }
 
 void ShowStatus()
 {
-    //remember top offset
-    int topOffset = Console.CursorTop;
-
     //initial write
+    Console.ForegroundColor = ConsoleColor.Blue;
+    Console.WriteLine("Checked: 0");
     Console.WriteLine("Created: 0");
     Console.WriteLine("Changed: 0");
     Console.WriteLine("Deleted: 0");
-    Console.WriteLine("Failing: 0");
+    Console.Write("Failing: 0");
+    Console.ResetColor();
 
-    while (Running)
+    bool running = true;
+
+    while (true)
     {
         Thread.Sleep(100);
+
+
         Console.CursorLeft = 9;
-        Console.CursorTop = topOffset;
+        Console.CursorTop -= 4;
+        Console.Write(Checked);
+
+        Console.CursorLeft = 9;
+        Console.CursorTop++;
         Console.Write(Created);
 
         Console.CursorLeft = 9;
-        Console.CursorTop = topOffset + 1;
+        Console.CursorTop++;
         Console.Write(Changed);
 
         Console.CursorLeft = 9;
-        Console.CursorTop = topOffset + 2;
+        Console.CursorTop++;
         Console.Write(Deleted);
 
         Console.CursorLeft = 9;
-        Console.CursorTop = topOffset + 3;
+        Console.CursorTop++;
         Console.Write(Failing);
+        
+        if (!running)
+            break;
+        if (!Running)
+            running = false;
     }
+
+    Console.WriteLine();
 }
 
 DirectoryDeletionResult DeleteAndCount(string path, StateTree tree)
 {
+    Deleted++;
+
     bool anySucceeded = false;
     List<string> failed = [];
 
     foreach (var kv in tree.Directories)
+    {
+        Checked++;
         switch (DeleteAndCount(path + '/' + kv.Key, kv.Value))
         {
             case DirectoryDeletionResult.Success:
@@ -185,44 +299,45 @@ DirectoryDeletionResult DeleteAndCount(string path, StateTree tree)
                 anySucceeded = true;
                 break;
             case DirectoryDeletionResult.AllFailed:
-                failed.Add(path[(Target.Length+1)..] + '/' + kv.Key);
+                failed.Add('/' + path[Target.Length..] + kv.Key);
                 break;
         }
+    }
     
     foreach (var kv in tree.Files)
+    {
+        Checked++;
         try
         {
+            Deleted++;
             File.Delete(path + '/' + kv.Key);
             tree.Files.Remove(kv.Key);
-            Deleted++;
             anySucceeded = true;
         }
         catch
         {
-            failed.Add(path[(Target.Length+1)..] + '/' + kv.Key);
+            failed.Add('/' + path[Target.Length..] + kv.Key);
         }
+    }
     
     if (failed.Count == 0)
         try
         {
-            Directory.Delete(path);
-            Deleted++;
+            Directory.Delete(path, true);
             return DirectoryDeletionResult.Success;
         }
         catch
         {
             return DirectoryDeletionResult.AllFailed;
         }
-    else if (anySucceeded)
+
+    Failing += failed.Count;
+    if (anySucceeded)
     {
         FailedPaths.AddRange(failed);
-        Failing += failed.Count;
         return DirectoryDeletionResult.SomeFailed;
     }
-    else
-    {
-        return DirectoryDeletionResult.AllFailed;
-    }
+    return DirectoryDeletionResult.AllFailed;
 }
 
 static string VersionString(Assembly assembly)
@@ -235,6 +350,14 @@ static string VersionString(Assembly assembly)
     if (version.Build != 0)
         return $"{version.Major}.{version.Minor}.{version.Build}";
     return $"{version.Major}.{version.Minor}";
+}
+
+public enum DirectoryBackupResult
+{
+    NoAction,
+    Success,
+    SomeFailed,
+    AllFailed
 }
 
 public enum DirectoryDeletionResult
@@ -253,8 +376,8 @@ public class StateTree
     public string Encode()
         => string.Join(';',
             [
-                .. Directories.Select(x => $"{x.Key}=({x.Value.Encode()})"),
-                .. Files.Select(x => $"{x.Key}={x.Value}")
+                .. Directories.Select(x => $"{x.Key.ToBase64TreeSafe()}=({x.Value.Encode()})"),
+                .. Files.Select(x => $"{x.Key.ToBase64TreeSafe()}={x.Value}")
             ]);
 
     public static StateTree Load(string path)
@@ -283,7 +406,7 @@ public class StateTree
             }
             if (read == -1)
                 return;
-            string key = keyBuilder.ToString();
+            string key = keyBuilder.ToString().FromBase64TreeSafe();
 
             //value
             read = reader.Read();
@@ -317,4 +440,13 @@ public class StateTree
             }
         }
     }
+}
+
+static class Extensions
+{
+    public static string ToBase64TreeSafe(this string value)
+        => Convert.ToBase64String(Encoding.UTF8.GetBytes(value)).Replace('=', '_');
+
+    public static string FromBase64TreeSafe(this string base64)
+        => Encoding.UTF8.GetString(Convert.FromBase64String(base64.Replace('_', '=')));
 }
