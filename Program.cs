@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Text;
 
 Console.WriteLine($"uwap.org/backto {VersionString(Assembly.GetExecutingAssembly())}");
@@ -73,6 +73,7 @@ else
 //status variables
 bool Running = true;
 
+string Current = "";
 int Checked = 0;
 int Created = 0;
 int Changed = 0;
@@ -92,6 +93,7 @@ File.WriteAllText(Target + "/BackupState.bin", State.Encode());
 
 //wait for status task to finish
 Running = false;
+Current = "Finishing...";
 await statusTask;
 
 //done
@@ -119,7 +121,7 @@ DirectoryBackupResult Backup(string source, string target, StateTree state)
     //remove deleted directories
     foreach (var kv in state.Directories)
     {
-        Checked++;
+        SetCurrentPath(source + '/' + kv.Key);
         if (!Directory.Exists(source + '/' + kv.Key))
             switch (DeleteAndCount(target + '/' + kv.Key, kv.Value))
             {
@@ -140,7 +142,7 @@ DirectoryBackupResult Backup(string source, string target, StateTree state)
     //remove deleted files
     foreach (var kv in state.Files)
     {
-        Checked++;
+        SetCurrentPath(source + '/' + kv.Key);
         if (!File.Exists(source + '/' + kv.Key))
             try
             {
@@ -161,7 +163,7 @@ DirectoryBackupResult Backup(string source, string target, StateTree state)
     //add/update directories
     foreach (var directory in sourceInfo.GetDirectories().Select(x => x.Name))
     {
-        Checked++;
+        SetCurrentPath(source + '/' + directory);
         try
         {
             if (!state.Directories.TryGetValue(directory, out var subState))
@@ -195,7 +197,7 @@ DirectoryBackupResult Backup(string source, string target, StateTree state)
     //add/update files
     foreach (var file in sourceInfo.GetFiles().Select(x => x.Name))
     {
-        Checked++;
+        SetCurrentPath(source + '/' + file);
         try
         {
             string timestamp = File.GetLastWriteTimeUtc(source + '/' + file).Ticks.ToString();
@@ -232,10 +234,19 @@ DirectoryBackupResult Backup(string source, string target, StateTree state)
     return DirectoryBackupResult.AllFailed;
 }
 
+void SetCurrentPath(string path)
+{
+    Checked++;
+    if (path.Length > Console.BufferWidth - 10)
+        Current = "..." + path[(path.Length - Console.BufferWidth + 13)..];
+    else Current = path;
+}
+
 void ShowStatus()
 {
     //initial write
     Console.ForegroundColor = ConsoleColor.Blue;
+    Console.WriteLine("Current: ");
     Console.WriteLine("Checked: 0");
     Console.WriteLine("Created: 0");
     Console.WriteLine("Changed: 0");
@@ -244,14 +255,21 @@ void ShowStatus()
     Console.ResetColor();
 
     bool running = true;
+    string lastCurrent = "";
 
     while (true)
     {
         Thread.Sleep(100);
 
+        Console.CursorLeft = 9;
+        Console.CursorTop -= 5;
+        string current = Current;
+        Console.Write(current);
+        for (int i = current.Length; i < lastCurrent.Length; i++)
+            Console.Write(' ');
 
         Console.CursorLeft = 9;
-        Console.CursorTop -= 4;
+        Console.CursorTop++;
         Console.Write(Checked);
 
         Console.CursorLeft = 9;
@@ -288,7 +306,7 @@ DirectoryDeletionResult DeleteAndCount(string path, StateTree tree)
 
     foreach (var kv in tree.Directories)
     {
-        Checked++;
+        SetCurrentPath(path + '/' + kv.Key);
         switch (DeleteAndCount(path + '/' + kv.Key, kv.Value))
         {
             case DirectoryDeletionResult.Success:
@@ -306,7 +324,7 @@ DirectoryDeletionResult DeleteAndCount(string path, StateTree tree)
     
     foreach (var kv in tree.Files)
     {
-        Checked++;
+        SetCurrentPath(path + '/' + kv.Key);
         try
         {
             Deleted++;
