@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Text;
 
 Console.WriteLine($"uwap.org/backto {VersionString(Assembly.GetExecutingAssembly())}");
@@ -14,7 +14,7 @@ if (args.Length != 2)
     Console.WriteLine(" backto [source] [target]");
     return;
 }
-string Source = Path.GetFullPath(args[0]);
+string Source = Path.GetFullPath(args[0]).TrimEnd('/', '\\');
 if (!Directory.Exists(Source))
 {
     Console.ForegroundColor = ConsoleColor.Red;
@@ -35,7 +35,7 @@ if (File.Exists(Source + "/BackupState.bin"))
     Console.WriteLine(" backto [source] [target]");
     return;
 }
-string Target = Path.GetFullPath(args[1]);
+string Target = Path.GetFullPath(args[1]).TrimEnd('/', '\\');
 if (!Directory.Exists(Target))
 {
     Console.ForegroundColor = ConsoleColor.Red;
