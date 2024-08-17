@@ -267,6 +267,7 @@ void ShowStatus()
         Console.Write(current);
         for (int i = current.Length; i < lastCurrent.Length; i++)
             Console.Write(' ');
+        lastCurrent = current;
 
         Console.CursorLeft = 9;
         Console.CursorTop++;
