@@ -133,7 +133,7 @@ DirectoryBackupResult Backup(string source, string target, StateTree state)
                     anySucceeded = true;
                     break;
                 case DirectoryDeletionResult.AllFailed:
-                    failed.Add('/' + target[Target.Length..] + kv.Key);
+                    failed.Add(target[Target.Length..] + '/' + kv.Key);
                     break;
             }
         else anySucceeded = true;
@@ -153,7 +153,7 @@ DirectoryBackupResult Backup(string source, string target, StateTree state)
             }
             catch
             {
-                failed.Add('/' + target[Target.Length..] + kv.Key);
+                failed.Add(target[Target.Length..] + '/' + kv.Key);
             }
         else anySucceeded = true;
     }
@@ -183,14 +183,14 @@ DirectoryBackupResult Backup(string source, string target, StateTree state)
                     anySucceeded = true;
                     break;
                 case DirectoryBackupResult.AllFailed:
-                    failed.Add('/' + target[Target.Length..] + directory);
+                    failed.Add(target[Target.Length..] + '/' + directory);
                     break;
                 //no action for NoAction
             }
         }
         catch
         {
-            failed.Add('/' + target[Target.Length..] + directory);
+            failed.Add(target[Target.Length..] + '/' + directory);
         }
     }
 
@@ -218,7 +218,7 @@ DirectoryBackupResult Backup(string source, string target, StateTree state)
         }
         catch
         {
-            failed.Add('/' + target[Target.Length..] + file);
+            failed.Add(target[Target.Length..] + '/' + file);
         }
     }
     
@@ -318,7 +318,7 @@ DirectoryDeletionResult DeleteAndCount(string path, StateTree tree)
                 anySucceeded = true;
                 break;
             case DirectoryDeletionResult.AllFailed:
-                failed.Add('/' + path[Target.Length..] + kv.Key);
+                failed.Add(path[Target.Length..] + '/' + kv.Key);
                 break;
         }
     }
@@ -335,7 +335,7 @@ DirectoryDeletionResult DeleteAndCount(string path, StateTree tree)
         }
         catch
         {
-            failed.Add('/' + path[Target.Length..] + kv.Key);
+            failed.Add(path[Target.Length..] + '/' + kv.Key);
         }
     }
     
