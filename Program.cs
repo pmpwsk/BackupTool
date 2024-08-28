@@ -161,7 +161,7 @@ DirectoryBackupResult Backup(string source, string target, StateTree state)
     DirectoryInfo sourceInfo = new(source);
 
     //add/update directories
-    foreach (var directory in sourceInfo.GetDirectories().Select(x => x.Name))
+    foreach (var directory in sourceInfo.GetDirectories().Where(x => x.LinkTarget == null).Select(x => x.Name))
     {
         SetCurrentPath(source + '/' + directory);
         try
@@ -195,7 +195,7 @@ DirectoryBackupResult Backup(string source, string target, StateTree state)
     }
 
     //add/update files
-    foreach (var file in sourceInfo.GetFiles().Select(x => x.Name))
+    foreach (var file in sourceInfo.GetFiles().Where(x => x.LinkTarget == null).Select(x => x.Name))
     {
         SetCurrentPath(source + '/' + file);
         try
